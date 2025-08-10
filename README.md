@@ -7,6 +7,7 @@
 ### English  
 <details>  
 <summary><strong>Expand</strong></summary>  
+```bash
 - **Dynamic Asset Pool**: Configure any combination of stock, bond, and commodity ETFs available through akshare.  
 - **Flexible Machine Learning**:  
   - Choose from a rich library of technical factors (Momentum, Volatility, Oscillators, etc.).  
@@ -31,6 +32,7 @@
 
 ### 中文  
 <details>  
+```bash
 <summary><strong>展开</strong></summary>  
 - **动态资产池**：可配置akshare支持的任何股票、债券和商品ETF组合。  
 - **灵活的机器学习**：  
