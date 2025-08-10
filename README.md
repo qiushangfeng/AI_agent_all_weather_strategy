@@ -69,11 +69,11 @@
    # Activate (macOS/Linux)  
    source venv/bin/activate
 
-3. **Install dependencies：
+3. **Install dependencies**：
    ```bash
    pip install -r requirements.txt
 
-4. **Set up API Keys：
+4. **Set up API Keys**：
    ```bash
    从 OpenAI 或 DeepSeek 获取 API 密钥。
    在应用 UI 的 “API Key” 字段中输入密钥（请勿硬编码到源代码中）。
