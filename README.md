@@ -29,7 +29,7 @@
 </details>  
 
 
-### 简体中文  
+### 中文  
 <details>  
 <summary><strong>展开</strong></summary>  
 - **动态资产池**：可配置akshare支持的任何股票、债券和商品ETF组合。  
@@ -54,13 +54,30 @@
 </details>  
 
 
-## 📸 Screenshot | 应用截图  
-![alt text](app_screenshot.png)  
 
 
 ## 🛠️ Installation & Setup | 安装与设置  
 1. **Clone the repository**：  
    ```bash  
    git clone https://github.com/your-username/all_weather_project.git  
-   cd all_weather_project  
+   cd all_weather_project
+
+2. **Clone the repository**：
+   ```bash
+   # Create virtual environment  
+   python -m venv venv  
+
+   # Activate (Windows)  
+   .\venv\Scripts\activate  
+
+   # Activate (macOS/Linux)  
+   source venv/bin/activate
+
+3. **Install dependencies：
+   ```bash
+   pip install -r requirements.txt
+
+4. **Set up API Keys：
+   从 OpenAI 或 DeepSeek 获取 API 密钥。
+   在应用 UI 的 “API Key” 字段中输入密钥（请勿硬编码到源代码中）。
 
