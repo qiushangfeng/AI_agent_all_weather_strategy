@@ -1,39 +1,144 @@
 import pandas as pd
 import numpy as np
 import akshare as ak
-
+import time
+import requests
+# def get_etf_data(config, log_emitter):
+#     """Fetches historical ETF data from akshare."""
+#     asset_mapping = config['asset_mapping']
+#     start_date = config['start_date']
+#     end_date = config['end_date']
+    
+#     all_etf_prices = {}
+#     log_emitter("Fetching historical ETF data...")
+#     PRICE_COLUMN = '收盘'
+    
+#     for name, code in asset_mapping.items():
+#         log_emitter(f"--- Processing: {name} ({code}) ---")
+#         try:
+#             etf_hist = ak.fund_etf_hist_em(symbol=code, period="daily", start_date=start_date, end_date=end_date, adjust="qfq")
+#             if not isinstance(etf_hist, pd.DataFrame) or etf_hist.empty: continue
+            
+#             df = etf_hist.copy()
+#             df['日期'] = pd.to_datetime(df['日期'], errors='coerce')
+#             df[PRICE_COLUMN] = pd.to_numeric(df[PRICE_COLUMN], errors='coerce')
+#             df.dropna(subset=['日期', PRICE_COLUMN], inplace=True)
+            
+#             if df.empty: continue
+            
+#             df = df.set_index('日期')[[PRICE_COLUMN]]
+#             df.columns = [name]
+#             if df.index.has_duplicates: df = df[~df.index.duplicated(keep='first')]
+            
+#             all_etf_prices[name] = df
+#         except Exception as e:
+#             log_emitter(f"Error fetching data for {name} ({code}): {e}")
+            
+#     if not all_etf_prices: return pd.DataFrame()
+    
+#     price_df = pd.concat(all_etf_prices.values(), axis=1)
+#     price_df.ffill(inplace=True)
+#     price_df.dropna(inplace=True)
+#     log_emitter("All ETF data fetched and merged.")
+#     return price_df
 def get_etf_data(config, log_emitter):
-    """Fetches historical ETF data from akshare."""
+    """
+    Fetches historical ETF data directly from Eastmoney's API with retry mechanism.
+    This is a more stable replacement for ak.fund_etf_hist_em.
+    """
     asset_mapping = config['asset_mapping']
     start_date = config['start_date']
     end_date = config['end_date']
     
     all_etf_prices = {}
-    log_emitter("Fetching historical ETF data...")
+    log_emitter("Fetching historical ETF data (Stable Version)...")
     PRICE_COLUMN = '收盘'
     
+    # --- Start of the new stable fetching logic ---
+    
+    # Common headers to mimic a browser
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+
+    def get_market_secid(code: str) -> str:
+        """Converts a stock code to Eastmoney's secid format."""
+        if code.startswith('5') or code.startswith('6'):
+            return f"1.{code}"
+        elif code.startswith('1') or code.startswith('0') or code.startswith('3'):
+            return f"0.{code}"
+        # Fallback for other cases, can be expanded
+        return f"1.{code}"
+
     for name, code in asset_mapping.items():
         log_emitter(f"--- Processing: {name} ({code}) ---")
-        try:
-            etf_hist = ak.fund_etf_hist_em(symbol=code, period="daily", start_date=start_date, end_date=end_date, adjust="qfq")
-            if not isinstance(etf_hist, pd.DataFrame) or etf_hist.empty: continue
+        
+        params = {
+            'secid': get_market_secid(code),
+            'klt': '101',  # Daily K-line
+            'fqt': '1',    # Forward-adjusted prices
+            'beg': start_date,
+            'end': end_date,
+            'fields1': 'f1,f2,f3,f4,f5,f6',
+            'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+            'ut': 'fa5fd1943c7b386f172d6893dbfba10b',
+            '_': str(int(time.time() * 1000))
+        }
+        
+        url = "http://push2his.eastmoney.com/api/qt/stock/kline/get"
+        
+        # Retry mechanism
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(url, params=params, headers=headers, timeout=20)
+                response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+                
+                data = response.json()
+                if not data or 'data' not in data or not data['data'] or 'klines' not in data['data']:
+                    log_emitter(f"Warning: No data returned for {name} ({code}).")
+                    break # Break retry loop if response is valid but empty
+
+                kline_data = data['data']['klines']
+                
+                rows = [item.split(',') for item in kline_data]
+                df = pd.DataFrame(rows, columns=['日期', '开盘', '收盘', '最高', '最低', '成交量', '成交额', '振幅', '涨跌幅', '涨跌额', '换手率'])
+
+                # Data cleaning and formatting
+                df['日期'] = pd.to_datetime(df['日期'])
+                numeric_cols = ['开盘', '收盘', '最高', '最低', '成交量', '成交额']
+                for col in numeric_cols:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                
+                df.dropna(subset=['日期', PRICE_COLUMN], inplace=True)
+                if df.empty:
+                    log_emitter(f"Warning: DataFrame is empty after cleaning for {name} ({code}).")
+                    break
+
+                df = df.set_index('日期')[[PRICE_COLUMN]]
+                df.columns = [name]
+                if df.index.has_duplicates:
+                    df = df[~df.index.duplicated(keep='first')]
+                
+                all_etf_prices[name] = df
+                log_emitter(f"Successfully fetched data for {name} ({code}).")
+                break  # Success, exit retry loop
+
+            except requests.exceptions.RequestException as e:
+                log_emitter(f"Attempt {attempt + 1}/{max_retries} failed for {name} ({code}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(3) # Wait for 3 seconds before retrying
+                else:
+                    log_emitter(f"Error: Could not fetch data for {name} ({code}) after {max_retries} attempts.")
+            except Exception as e:
+                log_emitter(f"An unexpected error occurred for {name} ({code}): {e}")
+                break # Exit retry loop on non-network errors
+
+    # --- End of the new stable fetching logic ---
             
-            df = etf_hist.copy()
-            df['日期'] = pd.to_datetime(df['日期'], errors='coerce')
-            df[PRICE_COLUMN] = pd.to_numeric(df[PRICE_COLUMN], errors='coerce')
-            df.dropna(subset=['日期', PRICE_COLUMN], inplace=True)
-            
-            if df.empty: continue
-            
-            df = df.set_index('日期')[[PRICE_COLUMN]]
-            df.columns = [name]
-            if df.index.has_duplicates: df = df[~df.index.duplicated(keep='first')]
-            
-            all_etf_prices[name] = df
-        except Exception as e:
-            log_emitter(f"Error fetching data for {name} ({code}): {e}")
-            
-    if not all_etf_prices: return pd.DataFrame()
+    if not all_etf_prices: 
+        log_emitter("Error: No valid ETF data could be fetched for any asset.")
+        return pd.DataFrame()
     
     price_df = pd.concat(all_etf_prices.values(), axis=1)
     price_df.ffill(inplace=True)
@@ -135,5 +240,6 @@ def build_labels(price_df, config, log_emitter):
     future_returns = price_df.pct_change(periods=config['prediction_window']).shift(-config['prediction_window'])
     labels = (future_returns > 0).astype(int)
     return labels.stack().reset_index().rename(columns={'level_0': '日期', 'level_1': 'asset', 0: 'target'})
+
 
 
