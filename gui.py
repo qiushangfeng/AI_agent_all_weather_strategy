@@ -412,22 +412,49 @@ class MainApp(QMainWindow):
         self.run_button.setText(f"{TRANSLATIONS[self.current_lang]['running_button']} ({percent}%)")
 
     def on_finish(self, final_results):
+        """
+        回测完成后的槽函数 (最终修正版)。
+        """
         performance_dict = final_results.get('portfolios', {})
-        self.all_weights_history = final_results.get('weights', {})
+        weights_dict = final_results.get('weights', {})
+        self.all_weights_history = weights_dict
         
         self.run_button.setEnabled(True)
-        self.run_button.setText(TRANSLATIONS[self.current_lang]["run_button"])
-        self.update_log("\nBacktest complete! Generating performance report and chart...")
-        
-        analyze_and_plot_performance(performance_dict, self.canvas, self.update_log)
+        self.run_button.setText("运行回测")
+        self.update_log("\n回测全部完成！正在生成性能报告和图表...")
+        self.analyze_and_plot_performance(performance_dict)
 
         save_dir = "holdings_data"
         os.makedirs(save_dir, exist_ok=True)
-        # ... (save logic) ...
+        for strategy_name, weights_df in weights_dict.items():
+            filename = f"{strategy_name.replace(' ', '_').replace('(', '').replace(')', '')}_{pd.Timestamp.now().strftime('%Y%m%d%H%M')}.csv"
+            filepath = os.path.join(save_dir, filename)
+            weights_df.to_csv(filepath)
+            self.update_log(f"持仓数据已保存至：{filepath}")
 
     def query_holdings(self):
-        # ... (query logic remains the same) ...
-        pass
+        """查询并显示指定日期的持仓"""
+        if not self.all_weights_history:
+            self.update_log("\n[查询失败]：请先运行一次回测以生成持仓数据。")
+            return
+            
+        query_date = pd.to_datetime(self.holding_date_input.date().toString("yyyy-MM-dd"))
+        self.update_log(f"\n" + "="*20 + f" {query_date.strftime('%Y-%m-%d')} 持仓查询 " + "="*20)
+        
+        holdings_data = {}
+        for name, weights_df in self.all_weights_history.items():
+            if not weights_df.empty and query_date >= weights_df.index.min():
+                daily_holding = weights_df.asof(query_date)
+                if daily_holding is not None:
+                    holdings_data[name] = daily_holding
+        
+        if not holdings_data:
+            self.update_log(f"在日期 {query_date.strftime('%Y-%m-%d')} 未找到任何策略的持仓数据。")
+            return
+            
+        holding_df = pd.DataFrame(holdings_data).applymap(lambda x: f"{x:.2%}" if pd.notna(x) else "0.00%")
+        self.update_log(holding_df.to_string())
+        self.update_log("="*60)
 
     def update_log(self, message):
         self.log_output.append(message)
@@ -437,3 +464,4 @@ class MainApp(QMainWindow):
         self.run_button.setEnabled(True)
         self.run_button.setText(TRANSLATIONS[self.current_lang]["run_button"])
         self.update_log(f"\n!!! AN ERROR OCCURRED !!!\n{message}")
+
