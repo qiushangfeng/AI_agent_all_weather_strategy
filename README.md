@@ -30,7 +30,7 @@ This is a sophisticated backtesting platform for designing, testing, and analyzi
 
 
 ### 中文  
-- **动态资产池**：可配置akshare支持的任何股票、债券和商品ETF组合。  
+- **动态资产池**：可配置akshare支持的任何股票、债券和商品ETF组合，使用爬虫稳定接口。  
 - **灵活的机器学习**：  
   - 从丰富的技术因子库中选择（动量、波动率、震荡指标等）。  
   - 通过选择多个基模型（如逻辑回归、随机森林、LightGBM）和一个元模型，构建强大的Stacking集成模型。  
@@ -50,6 +50,7 @@ This is a sophisticated backtesting platform for designing, testing, and analyzi
   - 计算并显示关键性能指标（年化收益、波动率、夏普比率、最大回撤等）。  
   - 提供“持仓查询”工具，以查看任何策略在任何一天的确切资产配置。  
 </details>  
+
 
 
 
@@ -79,4 +80,8 @@ This is a sophisticated backtesting platform for designing, testing, and analyzi
    ```bash
    从 OpenAI 或 DeepSeek 获取 API 密钥。
    在应用 UI 的 “API Key” 字段中输入密钥（请勿硬编码到源代码中）。
+
+
+## 🛠️ todo：  
+支持模型滚动训练，减少过拟合
 
