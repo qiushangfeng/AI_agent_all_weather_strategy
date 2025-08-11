@@ -42,33 +42,37 @@ def get_etf_data(config, log_emitter):
     return price_df
 
 def build_features(price_df, config, progress_emitter, log_emitter):
-    """Builds multi-factor features for each asset."""
-    log_emitter("Building multi-factor features...")
-    features_list = []
+    """为每个资产构建多因子特征 (大规模增强版，纯Pandas实现)"""
+    log_emitter("开始构建多因子特征..."); features_list = []
+    
     selected_factors = config['ml_factors']
     
-    risk_premium = None
+    # 股债风险溢价因子（如果选择了）
+    risk_premium = None # 先初始化
     if 'risk_premium' in selected_factors:
-        stock_rp_asset = config['stock_rp_asset']
-        bond_rp_asset = config['bond_rp_asset']
-        if stock_rp_asset in price_df.columns and bond_rp_asset in price_df.columns:
-            stock_return = price_df[stock_rp_asset].pct_change()
-            bond_return = price_df[bond_rp_asset].pct_change()
-            risk_premium = (stock_return - bond_return).rolling(window=20).mean()
-        else:
-            log_emitter(f"Warning: Assets for risk premium factor not found. Skipping.")
+        try:
+            stock_rp_asset = config['stock_rp_asset']
+            bond_rp_asset = config['bond_rp_asset']
+            if stock_rp_asset in price_df.columns and bond_rp_asset in price_df.columns:
+                stock_return = price_df[stock_rp_asset].pct_change()
+                bond_return = price_df[bond_rp_asset].pct_change()
+                risk_premium = (stock_return - bond_return).rolling(window=20).mean()
+            else:
+                log_emitter(f"警告：风险溢价因子所需的资产({stock_rp_asset}或{bond_rp_asset})不在资产池中，已跳过该因子。")
+                if 'risk_premium' in selected_factors: selected_factors.remove('risk_premium')
+        except Exception as e:
+            log_emitter(f"计算风险溢价因子时出错: {e}，已跳过该因子。")
             if 'risk_premium' in selected_factors: selected_factors.remove('risk_premium')
 
     total_assets = len(price_df.columns)
     for i, asset in enumerate(price_df.columns):
-        progress_emitter(int((i / total_assets) * 100), f"Building features: {asset}")
+        progress_emitter(int((i / total_assets) * 100), f"构建特征: {asset}")
         
-        prices = price_df[asset]
-        close = prices
-        returns = close.pct_change()
+        prices = price_df[asset]; high = prices; low = prices; close = prices; returns = close.pct_change()
         asset_features = pd.DataFrame(index=prices.index)
         asset_features['asset'] = asset
 
+        # --- 按需计算每个因子 ---
         if 'mom1m' in selected_factors: asset_features['mom1m'] = close.pct_change(periods=20)
         if 'mom3m' in selected_factors: asset_features['mom3m'] = close.pct_change(periods=60)
         if 'mom6m' in selected_factors: asset_features['mom6m'] = close.pct_change(periods=120)
@@ -77,13 +81,16 @@ def build_features(price_df, config, progress_emitter, log_emitter):
             sma20 = close.rolling(window=20).mean()
             if 'sma20' in selected_factors: asset_features['sma20'] = sma20
             if 'price_div_sma20' in selected_factors: asset_features['price_div_sma20'] = close / sma20
-                
+            
         if any(f in selected_factors for f in ['sma60', 'price_div_sma60']):
             sma60 = close.rolling(window=60).mean()
             if 'sma60' in selected_factors: asset_features['sma60'] = sma60
             if 'price_div_sma60' in selected_factors: asset_features['price_div_sma60'] = close / sma60
-            
+        
         if any(f in selected_factors for f in ['bb_width', 'bb_percent']):
+            # sma20 might not be defined if only bb_width is selected without sma20
+            if 'sma20' not in locals():
+                 sma20 = close.rolling(window=20).mean()
             std20 = close.rolling(window=20).std()
             upper_band = sma20 + 2 * std20
             lower_band = sma20 - 2 * std20
@@ -91,11 +98,10 @@ def build_features(price_df, config, progress_emitter, log_emitter):
             if 'bb_percent' in selected_factors: asset_features['bb_percent'] = (close - lower_band) / (upper_band - lower_band)
 
         if 'volatility' in selected_factors:
-            vol = returns.rolling(window=self.config['vol_window']).std() * np.sqrt(252)
+            vol = returns.rolling(window=config['vol_window']).std() * np.sqrt(252)
             asset_features['volatility'] = vol
         if 'inv_vol' in selected_factors:
-            # 确保 vol 被计算
-            if 'volatility' not in locals(): vol = returns.rolling(window=self.config['vol_window']).std() * np.sqrt(252)
+            if 'vol' not in locals(): vol = returns.rolling(window=config['vol_window']).std() * np.sqrt(252)
             asset_features['inv_vol'] = 1 / (vol + 1e-6)
         if 'atr' in selected_factors:
             tr1 = abs(high - low); tr2 = abs(high - close.shift()); tr3 = abs(low - close.shift())
@@ -128,6 +134,6 @@ def build_labels(price_df, config, log_emitter):
     log_emitter("Building prediction labels...")
     future_returns = price_df.pct_change(periods=config['prediction_window']).shift(-config['prediction_window'])
     labels = (future_returns > 0).astype(int)
-
     return labels.stack().reset_index().rename(columns={'level_0': '日期', 'level_1': 'asset', 0: 'target'})
+
 
