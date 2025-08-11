@@ -1,4 +1,5 @@
 # AI-Enhanced All-Weather Backtesting Platform  
+This is a sophisticated backtesting platform for designing, testing, and analyzing AI-enhanced "All-Weather" investment strategies. The application combines traditional quantitative finance techniques like Risk Parity with modern machine learning models (including Stacking ensembles and GRU networks) and a powerful AI Agent for dynamic, macro-aware asset allocation.
 这是一个复杂精密的回测平台，用于设计、测试和分析由AI增强的“全天候”投资策略。该应用将风险平价（Risk Parity）等传统量化金融技术与现代机器学习模型（包括Stacking集成和GRU神经网络）以及一个强大的、用于动态宏观资产配置的AI智能体相结合。  
 
 
