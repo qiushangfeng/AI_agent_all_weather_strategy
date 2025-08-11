@@ -422,7 +422,7 @@ class MainApp(QMainWindow):
         self.run_button.setEnabled(True)
         self.run_button.setText("运行回测")
         self.update_log("\n回测全部完成！正在生成性能报告和图表...")
-        self.analyze_and_plot_performance(performance_dict)
+        analyze_and_plot_performance(performance_dict, self.canvas, self.update_log)
 
         save_dir = "holdings_data"
         os.makedirs(save_dir, exist_ok=True)
@@ -464,4 +464,5 @@ class MainApp(QMainWindow):
         self.run_button.setEnabled(True)
         self.run_button.setText(TRANSLATIONS[self.current_lang]["run_button"])
         self.update_log(f"\n!!! AN ERROR OCCURRED !!!\n{message}")
+
 
