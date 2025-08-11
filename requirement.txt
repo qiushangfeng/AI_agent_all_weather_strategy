@@ -1,0 +1,25 @@
+# GUI Framework
+pyqt6
+
+# Core Data Science and Numerics
+pandas
+numpy
+
+# Machine Learning
+scikit-learn
+lightgbm
+torch
+
+# Financial Data Provider
+akshare
+
+# AI Agent API
+openai
+
+# Utilities
+tqdm
+matplotlib
+
+# Packaging and Obfuscation (for creating the .exe)
+pyinstaller
+pyarmor==7.7.4
