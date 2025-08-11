@@ -70,11 +70,18 @@ def build_features(price_df, config, progress_emitter, log_emitter):
         asset_features['asset'] = asset
 
         if 'mom1m' in selected_factors: asset_features['mom1m'] = close.pct_change(periods=20)
-        if 'mom3m' in selected_factors: asset_features['mom3m'] = close.pct_change(periods=60)
-        # ... (and so on for all other factors, the logic is identical to the original) ...
-        if any(f in selected_factors for f in ['sma20', 'price_div_sma20', 'bb_width', 'bb_percent']):
-            sma20 = close.rolling(window=20).mean()
-            if 'price_div_sma20' in selected_factors: asset_features['price_div_sma20'] = close / sma20
+            if 'mom3m' in selected_factors: asset_features['mom3m'] = close.pct_change(periods=60)
+            if 'mom6m' in selected_factors: asset_features['mom6m'] = close.pct_change(periods=120)
+
+            if any(f in selected_factors for f in ['sma20', 'sma60', 'price_div_sma20', 'price_div_sma60', 'bb_width', 'bb_percent']):
+                sma20 = close.rolling(window=20).mean()
+                if 'sma20' in selected_factors: asset_features['sma20'] = sma20
+                if 'price_div_sma20' in selected_factors: asset_features['price_div_sma20'] = close / sma20
+                
+            if any(f in selected_factors for f in ['sma60', 'price_div_sma60']):
+                sma60 = close.rolling(window=60).mean()
+                if 'sma60' in selected_factors: asset_features['sma60'] = sma60
+                if 'price_div_sma60' in selected_factors: asset_features['price_div_sma60'] = close / sma60
             
             if any(f in selected_factors for f in ['bb_width', 'bb_percent']):
                 std20 = close.rolling(window=20).std()
@@ -83,20 +90,43 @@ def build_features(price_df, config, progress_emitter, log_emitter):
                 if 'bb_width' in selected_factors: asset_features['bb_width'] = (upper_band - lower_band) / sma20
                 if 'bb_percent' in selected_factors: asset_features['bb_percent'] = (close - lower_band) / (upper_band - lower_band)
 
-        if 'volatility' in selected_factors:
-            asset_features['volatility'] = returns.rolling(window=config['vol_window']).std() * np.sqrt(252)
+            if 'volatility' in selected_factors:
+                vol = returns.rolling(window=self.config['vol_window']).std() * np.sqrt(252)
+                asset_features['volatility'] = vol
+            if 'inv_vol' in selected_factors:
+                # 确保 vol 被计算
+                if 'volatility' not in locals(): vol = returns.rolling(window=self.config['vol_window']).std() * np.sqrt(252)
+                asset_features['inv_vol'] = 1 / (vol + 1e-6)
+            if 'atr' in selected_factors:
+                tr1 = abs(high - low); tr2 = abs(high - close.shift()); tr3 = abs(low - close.shift())
+                tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                asset_features['atr'] = tr.ewm(span=14, adjust=False).mean()
 
-        if 'risk_premium' in selected_factors and risk_premium is not None:
-            asset_features['risk_premium'] = risk_premium
+            if 'rsi' in selected_factors:
+                delta = close.diff(); gain = (delta.where(delta > 0, 0)).ewm(com=13, adjust=False).mean()
+                loss = (-delta.where(delta < 0, 0)).ewm(com=13, adjust=False).mean(); rs = gain / loss
+                asset_features['rsi'] = 100 - (100 / (1 + rs))
+            if 'macd_diff' in selected_factors:
+                ema_fast = close.ewm(span=12, adjust=False).mean(); ema_slow = close.ewm(span=26, adjust=False).mean()
+                macd = ema_fast - ema_slow; macd_signal = macd.ewm(span=9, adjust=False).mean()
+                asset_features['macd_diff'] = macd - macd_signal
+            if 'roc' in selected_factors: asset_features['roc'] = close.pct_change(periods=20)
+            if 'cci' in selected_factors:
+                tp = (high + low + close) / 3; tp_sma = tp.rolling(window=20).mean()
+                mean_dev = abs(tp - tp_sma).rolling(window=20).mean()
+                asset_features['cci'] = (tp - tp_sma) / (0.015 * mean_dev)
 
-        features_list.append(asset_features)
+            if 'risk_premium' in selected_factors and risk_premium is not None:
+                asset_features['risk_premium'] = risk_premium
 
-    all_features = pd.concat(features_list)
-    return all_features.dropna(axis=1, how='all').dropna()
+            features_list.append(asset_features)
+
+        all_features = pd.concat(features_list); return all_features.dropna(axis=1, how='all').dropna()
 
 def build_labels(price_df, config, log_emitter):
     """Builds the target labels for prediction."""
     log_emitter("Building prediction labels...")
     future_returns = price_df.pct_change(periods=config['prediction_window']).shift(-config['prediction_window'])
     labels = (future_returns > 0).astype(int)
+
     return labels.stack().reset_index().rename(columns={'level_0': '日期', 'level_1': 'asset', 0: 'target'})
